@@ -7,7 +7,7 @@
 // by default:
 //
 //	import (
-//		_ "github.com/emersion/go-message/charset"
+//		_ "github.com/uatuko/go-message/charset"
 //	)
 //
 // Note, non-UTF-8 charsets are only supported when reading messages. Only

@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/emersion/go-message/mail"
+	"github.com/uatuko/go-message/mail"
 )
 
 func ExampleWriter() {
