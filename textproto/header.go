@@ -667,7 +667,7 @@ func formatHeaderField(k, v string) string {
 
 // WriteHeader writes a MIME header to w.
 func WriteHeader(w io.Writer, h Header) error {
-	for i := len(h.l) - 1; i >= 0; i-- {
+	for i := range h.l {
 		f := h.l[i]
 		if rawField, err := f.raw(); err == nil {
 			if _, err := w.Write(rawField); err != nil {
