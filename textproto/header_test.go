@@ -191,10 +191,11 @@ func TestHeader_FieldsByKey_Del(t *testing.T) {
 	}
 }
 
-const testHeader = "Received: from example.com by example.org\r\n" +
-	"Received: from localhost by example.com\r\n" +
+const testHeader = "From: Mitsuha Miyamizu <mitsuha.miyamizu@example.com>\r\n" +
 	"To: Taki Tachibana <taki.tachibana@example.org>\r\n" +
-	"From: Mitsuha Miyamizu <mitsuha.miyamizu@example.com>\r\n\r\n"
+	"Received: from localhost by example.com\r\n" +
+	"Received: from example.com by example.org\r\n" +
+	"\r\n"
 
 func TestReadHeader(t *testing.T) {
 	r := bufio.NewReader(strings.NewReader(testHeader))
@@ -205,10 +206,10 @@ func TestReadHeader(t *testing.T) {
 
 	l := collectHeaderFields(h.Fields())
 	want := []string{
-		"Received: from example.com by example.org",
-		"Received: from localhost by example.com",
-		"To: Taki Tachibana <taki.tachibana@example.org>",
 		"From: Mitsuha Miyamizu <mitsuha.miyamizu@example.com>",
+		"To: Taki Tachibana <taki.tachibana@example.org>",
+		"Received: from localhost by example.com",
+		"Received: from example.com by example.org",
 	}
 	if !reflect.DeepEqual(l, want) {
 		t.Errorf("Fields() reported incorrect values: got \n%#v\n but want \n%#v", l, want)
@@ -300,7 +301,7 @@ func TestHeader_AddRaw(t *testing.T) {
 	valUnfolded := `a=rsa-sha256; bh=uI/rVH7mLBSWkJVvQYKz3TbpdI2BLZWTIMKcuo0KHO I=; c=simple/simple; d=example.org; h=Subject:To:From; s=default; t=1577562184; v=1; b=;`
 
 	h := newTestHeader()
-	h.AddRaw([]byte(dkimLine))
+	h.AddRawT([]byte(dkimLine))
 
 	// 1. It should be possible to get value using any key case.
 	// 2. It should be un-folded.

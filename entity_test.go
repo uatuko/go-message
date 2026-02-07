@@ -276,8 +276,8 @@ func TestEntity_WriteTo_convert(t *testing.T) {
 	}
 
 	expected := "Mime-Version: 1.0\r\n" +
-		"Content-Transfer-Encoding: quoted-printable\r\n" +
 		"Content-Type: text/plain; charset=utf-8\r\n" +
+		"Content-Transfer-Encoding: quoted-printable\r\n" +
 		"\r\n" +
 		"Bonjour =C3=A0 tous"
 

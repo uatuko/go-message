@@ -46,14 +46,17 @@ func (f *headerField) raw() ([]byte, error) {
 // written, the result will be exactly the same as the original (including
 // whitespace and header field ordering). This is required for e.g. DKIM.
 //
-// Mutating the header is restricted: the only two allowed operations are
-// inserting a new header field at the top and deleting a header field. This is
-// again necessary for DKIM.
+// Mutating the header after reading is restricted: the only two allowed
+// operations are inserting a new header field at the top and deleting a header
+// field. This is again necessary for DKIM.
 type Header struct {
-	// Fields are in reverse order so that inserting a new field at the top is
-	// cheap.
 	l []*headerField
 	m map[string][]*headerField
+
+	// reversed indicates whether the fields are stored in reverse order.
+	// This is used when reading so that inserting a new field at the top is
+	// cheap.
+	reversed bool
 }
 
 func makeHeaderMap(fs []*headerField) map[string][]*headerField {
@@ -75,7 +78,7 @@ func newHeader(fs []*headerField) Header {
 		fs[i], fs[opp] = fs[opp], fs[i]
 	}
 
-	return Header{l: fs, m: makeHeaderMap(fs)}
+	return Header{l: fs, m: makeHeaderMap(fs), reversed: true}
 }
 
 // HeaderFromMap creates a header from a map of header fields.
@@ -125,7 +128,31 @@ func (h *Header) AddRaw(kv []byte) {
 	h.m[k] = append(h.m[k], f)
 }
 
-// Add adds the key, value pair to the header. It prepends to any existing
+// AddRawT is similar to AddRaw, but ensures the field is inserted at the top.
+func (h *Header) AddRawT(kv []byte) {
+	colon := bytes.IndexByte(kv, ':')
+	if colon == -1 {
+		panic("textproto: Header.AddRaw: missing colon")
+	}
+	k := textproto.CanonicalMIMEHeaderKey(string(trim(kv[:colon])))
+	v := trimAroundNewlines(kv[colon+1:])
+
+	if h.m == nil {
+		h.m = make(map[string][]*headerField)
+	}
+
+	f := newHeaderField(k, v, kv)
+	if h.reversed {
+		h.l = append(h.l, f)
+		h.m[k] = append(h.m[k], f)
+	} else {
+		fs := []*headerField{f}
+		h.l = append(fs, h.l...)
+		h.m[k] = append(fs, h.m[k]...)
+	}
+}
+
+// Add adds the key, value pair to the header. It appends to any existing
 // fields associated with key.
 //
 // Key and value should obey character requirements of RFC 6532.
@@ -140,6 +167,25 @@ func (h *Header) Add(k, v string) {
 	f := newHeaderField(k, v, nil)
 	h.l = append(h.l, f)
 	h.m[k] = append(h.m[k], f)
+}
+
+// AddT is similar to Add, but ensures the field is inserted at the top.
+func (h *Header) AddT(k, v string) {
+	k = textproto.CanonicalMIMEHeaderKey(k)
+
+	if h.m == nil {
+		h.m = make(map[string][]*headerField)
+	}
+
+	f := newHeaderField(k, v, nil)
+	if h.reversed {
+		h.l = append(h.l, f)
+		h.m[k] = append(h.m[k], f)
+	} else {
+		fs := []*headerField{f}
+		h.l = append(fs, h.l...)
+		h.m[k] = append(fs, h.m[k]...)
+	}
 }
 
 // Get gets the first value associated with the given key. If there are no
@@ -193,6 +239,13 @@ func (h *Header) Set(k, v string) {
 	h.Add(k, v)
 }
 
+// SetT is similar to Set, but the header field inserted at the top. If the value
+// if being replaced, the field is moved to the top.
+func (h *Header) SetT(k, v string) {
+	h.Del(k)
+	h.AddT(k, v)
+}
+
 // Del deletes the values associated with key.
 func (h *Header) Del(k string) {
 	k = textproto.CanonicalMIMEHeaderKey(k)
@@ -218,7 +271,7 @@ func (h *Header) Copy() Header {
 	l := make([]*headerField, len(h.l))
 	copy(l, h.l)
 	m := makeHeaderMap(l)
-	return Header{l: l, m: m}
+	return Header{l: l, m: m, reversed: h.reversed}
 }
 
 // Len returns the number of fields in the header.
@@ -667,7 +720,7 @@ func formatHeaderField(k, v string) string {
 
 // WriteHeader writes a MIME header to w.
 func WriteHeader(w io.Writer, h Header) error {
-	for i := range h.l {
+	write := func(i int) error {
 		f := h.l[i]
 		if rawField, err := f.raw(); err == nil {
 			if _, err := w.Write(rawField); err != nil {
@@ -676,8 +729,25 @@ func WriteHeader(w io.Writer, h Header) error {
 		} else {
 			return fmt.Errorf("failed to write header field #%v (%q): %w", len(h.l)-i, f.k, err)
 		}
+
+		return nil
 	}
 
-	_, err := w.Write([]byte{'\r', '\n'})
+	var err error
+	if h.reversed {
+		for i := len(h.l) - 1; i >= 0; i-- {
+			if err = write(i); err != nil {
+				return err
+			}
+		}
+	} else {
+		for i := range h.l {
+			if err = write(i); err != nil {
+				return err
+			}
+		}
+	}
+
+	_, err = w.Write([]byte{'\r', '\n'})
 	return err
 }
